@@ -1,0 +1,9 @@
+/.venv
+/__pycache__
+/data
+/mitm_proxy.py
+/output.jsonl
+/print_numbers.py
+/random_number.py
+/response.json
+/venv
