@@ -68,35 +68,28 @@ jobs:
           git commit -m "amp changes for issue #$ISSUE_NUMBER"
           git push origin "$BRANCH_NAME"
 
-      - name: Create Pull Request
+      - name: Create PR URL
         run: |
           PR_TITLE="Amp changes for issue #$ISSUE_NUMBER"
           
-          cat > pr_body.txt << 'EOF'
-          Fixes #${{ env.ISSUE_NUMBER }}
+          cat > pr_body.txt << EOF
+          Fixes #$ISSUE_NUMBER
 
-          **Thread ID:** [${{ env.THREAD_ID }}](https://ampcode.com/threads/${{ env.THREAD_ID }})
+          Thread ID: [$THREAD_ID](https://ampcode.com/threads/$THREAD_ID)
 
-          **Original Issue:**
-          > ${{ env.ISSUE_BODY }}
+          Original Issue:
+          > $ISSUE_BODY
 
-          **Run Link:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Run Link: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EOF
-
+          
           PR_BODY=$(cat pr_body.txt)
 
-          PR_RESPONSE=$(curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls" \
-            -d "{
-              \"title\": \"$PR_TITLE\",
-              \"body\": \"$PR_BODY\",
-              \"head\": \"$BRANCH_NAME\",
-              \"base\": \"main\"
-            }")
-
-          PR_URL=$(echo "$PR_RESPONSE" | jq -r '.html_url')
+          # URL encode the title and body
+          ENCODED_TITLE=$(echo "$PR_TITLE" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip()))")
+          ENCODED_BODY=$(echo "$PR_BODY" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip()))")
+          
+          PR_URL="https://github.com/${{ github.repository }}/compare/main...$BRANCH_NAME?quick_pull=1&title=$ENCODED_TITLE&body=$ENCODED_BODY"
           echo "PR_URL=$PR_URL" >> $GITHUB_ENV
 
       - name: Comment on issue with PR link
