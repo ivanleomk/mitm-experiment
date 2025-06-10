@@ -47,12 +47,12 @@ jobs:
           THREAD_OUTPUT=$(amp threads new)
           echo "Full amp output: $THREAD_OUTPUT"
           THREAD_ID=$(echo "$THREAD_OUTPUT" | grep -o 'T-[a-f0-9-]*' | head -1)
-          
+
           if [ -z "$THREAD_ID" ]; then
             echo "Failed to extract thread ID from: $THREAD_OUTPUT"
             exit 1
           fi
-          
+
           echo "THREAD_ID=$THREAD_ID" >> $GITHUB_ENV
           echo "Created new thread: $THREAD_ID"
 
@@ -71,7 +71,7 @@ jobs:
       - name: Create PR URL
         run: |
           PR_TITLE="Amp changes for issue #$ISSUE_NUMBER"
-          
+
           cat > pr_body.txt << EOF
           Fixes #$ISSUE_NUMBER
 
@@ -82,13 +82,13 @@ jobs:
 
           Run Link: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EOF
-          
+
           PR_BODY=$(cat pr_body.txt)
 
           # URL encode the title and body
           ENCODED_TITLE=$(echo "$PR_TITLE" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip()))")
           ENCODED_BODY=$(echo "$PR_BODY" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip()))")
-          
+
           PR_URL="https://github.com/${{ github.repository }}/compare/main...$BRANCH_NAME?quick_pull=1&title=$ENCODED_TITLE&body=$ENCODED_BODY"
           echo "PR_URL=$PR_URL" >> $GITHUB_ENV
 
@@ -97,4 +97,4 @@ jobs:
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
-            -d "{\"body\": \"@$ISSUE_USER Changes implemented! 🎉\n\n**Pull Request:** $PR_URL\n**Thread ID:** [$THREAD_ID](https://ampcode.com/threads/$THREAD_ID)\"}"
+            -d "{\"body\": \"@$ISSUE_USER Changes implemented! 🎉\n\n**[Create a Pull Request ➔]($PR_URL):**\n**Thread ID:** [$THREAD_ID](https://ampcode.com/threads/$THREAD_ID)\"}"
