@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
+      COMMENT_USER: ${{ github.event.comment.user.login }}
       COMMENT_BODY: ${{ github.event.comment.body }}
       AMP_API_KEY: ${{ secrets.AMP_API_KEY }}
 
@@ -58,13 +59,18 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
 
-          if ! git diff --quiet || ! git diff --cached --quiet; then
-            git add -A
-            git commit -m "Changes made by @amp: $USER_COMMAND"
-            git fetch origin ${{ github.event.pull_request.head.ref }}
-            git rebase origin/${{ github.event.pull_request.head.ref }}
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          fi
+          git add .
+          git commit -m "amp changes"
+          git push
+
+      - name: Respond to comment
+        run: |
+          RUN_LINK="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+            -d "{\"body\": \"@$COMMENT_USER\n\n[Thread ID: $THREAD_ID](https://ampcode.com/threads/$THREAD_ID)\nRun Link: $RUN_LINK\n\n> $COMMENT_BODY\"}"
 
       - uses: actions/cache/save@v3
         with:
