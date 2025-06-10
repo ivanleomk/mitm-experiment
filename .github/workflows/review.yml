@@ -25,14 +25,13 @@ jobs:
           path: thread_cache.json
           key: thread-${{ env.PR_NUMBER }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+
       - name: Install Sourcegraph Amp
-        run: |
-          curl -L https://install.amp.sh | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Configure Amp
-        run: amp sourcegraph
-
+        run: npm install -g @sourcegraph/amp
       - name: Extract user command
         run: |
           USER_COMMAND=$(echo "$COMMENT_BODY" | sed 's/^@amp\s*//')
@@ -58,7 +57,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          
+
           if ! git diff --quiet || ! git diff --cached --quiet; then
             git add -A
             git commit -m "Changes made by @amp: $USER_COMMAND"
