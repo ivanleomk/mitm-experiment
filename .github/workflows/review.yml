@@ -30,17 +30,8 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: "20"
-          cache: 'npm'
 
-      - name: Cache Sourcegraph Amp
-        id: cache-amp
-        uses: actions/cache@v3
-        with:
-          path: /usr/local/lib/node_modules/@sourcegraph/amp
-          key: amp-${{ hashFiles('**/package-lock.json') }}
-          
       - name: Install Sourcegraph Amp
-        if: steps.cache-amp.outputs.cache-hit != 'true'
         run: npm install -g @sourcegraph/amp
 
       - uses: astral-sh/setup-uv@v5
