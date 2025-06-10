@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_TITLE: ${{ github.event.issue.title }}
       ISSUE_USER: ${{ github.event.issue.user.login }}
       ISSUE_BODY: ${{ github.event.issue.body }}
       AMP_API_KEY: ${{ secrets.AMP_API_KEY }}
@@ -31,9 +32,18 @@ jobs:
       - name: Install Sourcegraph Amp
         run: npm install -g @sourcegraph/amp
 
+      - name: Debug issue info
+        run: |
+          echo "Issue Title: $ISSUE_TITLE"
+          echo "Issue Body: $ISSUE_BODY"
+          echo "Issue User: $ISSUE_USER"
+          echo "Issue Number: $ISSUE_NUMBER"
+
       - name: Extract user command
         run: |
-          USER_COMMAND=$(echo "$ISSUE_BODY" | sed 's/^@amp\s*//')
+          CLEAN_BODY=$(echo "$ISSUE_BODY" | sed 's/^@amp\s*//')
+          USER_COMMAND="Title: $ISSUE_TITLE\n\nBody: $CLEAN_BODY"
+          echo "Extracted User Command: $USER_COMMAND"
           echo "USER_COMMAND=$USER_COMMAND" >> $GITHUB_ENV
 
       - name: Create new branch
