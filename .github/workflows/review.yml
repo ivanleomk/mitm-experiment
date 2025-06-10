@@ -4,7 +4,7 @@ on:
     types: [created]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -19,6 +19,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - uses: actions/cache/restore@v3
         id: cache
@@ -29,63 +31,48 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install Sourcegraph Amp
         run: npm install -g @sourcegraph/amp
-
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --all-extras --dev
-
       - name: Extract user command
         run: |
-          # Extract the command after @amp
           USER_COMMAND=$(echo "$COMMENT_BODY" | sed 's/^@amp\s*//')
           echo "USER_COMMAND=$USER_COMMAND" >> $GITHUB_ENV
 
-      - name: Check for cached thread ID
-        id: thread-check
-        if: steps.cache.outputs.cache-hit == 'true'
+      - name: Get or create thread ID
         run: |
           if [ -f thread_cache.json ]; then
             THREAD_ID=$(cat thread_cache.json | jq -r '.thread_id')
             echo "THREAD_ID=$THREAD_ID" >> $GITHUB_ENV
-            echo "CACHED=true" >> $GITHUB_ENV
+            echo "Using cached thread ID: $THREAD_ID"
           else
-            echo "CACHED=false" >> $GITHUB_ENV
+            echo "Creating new thread"
+            THREAD_ID=$(amp threads new | grep -o 'thread-[a-z0-9-]*')
+            echo "THREAD_ID=$THREAD_ID" >> $GITHUB_ENV
+            echo "{\"thread_id\": \"$THREAD_ID\"}" > thread_cache.json
           fi
 
       - name: Run Amp with user command
-        if: env.CACHED != 'true'
+        run: echo "$USER_COMMAND" | amp threads continue "$THREAD_ID"
+
+      - name: Commit and push changes
         run: |
-          # Run amp with the user command
-          echo "$USER_COMMAND" | amp
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
 
-      - name: Fetch latest threads
-        run: |
-          # Run the fetch script to get the latest threads
-          python fetch.py
-
-          cat output.json
-
-          # Get the first thread ID from the output
-          FIRST_THREAD_ID=$(cat output.json | jq -r '.[0].id')
-          echo "THREAD_ID=$FIRST_THREAD_ID" >> $GITHUB_ENV
-
-          # Save to cache file
-          echo "{\"thread_id\": \"$FIRST_THREAD_ID\"}" > thread_cache.json
+          git add .
+          git commit -m "amp changes"
+          git push
 
       - name: Respond to comment
         run: |
-          CACHE_STATUS="Using new thread"
-          if [ "$CACHED" = "true" ]; then
-            CACHE_STATUS="Using cached thread"
-          fi
-
+          RUN_LINK="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
-            -d "{\"body\": \"@$COMMENT_USER $CACHE_STATUS\n\nThread ID: $THREAD_ID\nRun Link: $RUN_LINK\n\n> $COMMENT_BODY\"}"
+            -d "{\"body\": \"@$COMMENT_USER\n\n[Thread ID: $THREAD_ID](https://ampcode.com/threads/$THREAD_ID)\nRun Link: $RUN_LINK\n\n> $COMMENT_BODY\"}"
 
       - uses: actions/cache/save@v3
         with:
