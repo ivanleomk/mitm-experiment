@@ -44,7 +44,18 @@ jobs:
 
       - name: Get or create thread ID
         run: |
-          if [ -f thread_cache.json ]; then
+          # First try to get thread ID from PR description
+          PR_BODY=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER" | jq -r '.body')
+          
+          THREAD_ID_FROM_PR=$(echo "$PR_BODY" | grep -o 'thread-[a-z0-9-]*' | head -1)
+          
+          if [ ! -z "$THREAD_ID_FROM_PR" ]; then
+            THREAD_ID="$THREAD_ID_FROM_PR"
+            echo "THREAD_ID=$THREAD_ID" >> $GITHUB_ENV
+            echo "Using thread ID from PR description: $THREAD_ID"
+            echo "{\"thread_id\": \"$THREAD_ID\"}" > thread_cache.json
+          elif [ -f thread_cache.json ]; then
             THREAD_ID=$(cat thread_cache.json | jq -r '.thread_id')
             echo "THREAD_ID=$THREAD_ID" >> $GITHUB_ENV
             echo "Using cached thread ID: $THREAD_ID"

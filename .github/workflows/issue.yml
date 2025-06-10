@@ -1,0 +1,99 @@
+name: Amp Issue Bot
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  amp:
+    if: contains(github.event.issue.body, '@amp')
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_USER: ${{ github.event.issue.user.login }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
+      AMP_API_KEY: ${{ secrets.AMP_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+
+      - name: Install Sourcegraph Amp
+        run: npm install -g @sourcegraph/amp
+
+      - name: Extract user command
+        run: |
+          USER_COMMAND=$(echo "$ISSUE_BODY" | sed 's/^@amp\s*//')
+          echo "USER_COMMAND=$USER_COMMAND" >> $GITHUB_ENV
+
+      - name: Create new branch
+        run: |
+          BRANCH_NAME="amp-issue-$ISSUE_NUMBER"
+          git checkout -b "$BRANCH_NAME"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Create new Amp thread
+        run: |
+          THREAD_ID=$(amp threads new | grep -o 'thread-[a-z0-9-]*')
+          echo "THREAD_ID=$THREAD_ID" >> $GITHUB_ENV
+          echo "Created new thread: $THREAD_ID"
+
+      - name: Run Amp with user command
+        run: echo "$USER_COMMAND" | amp threads continue "$THREAD_ID"
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          git add .
+          git commit -m "amp changes for issue #$ISSUE_NUMBER"
+          git push origin "$BRANCH_NAME"
+
+      - name: Create Pull Request
+        run: |
+          PR_TITLE="Amp changes for issue #$ISSUE_NUMBER"
+          
+          cat > pr_body.txt << 'EOF'
+          Fixes #${{ env.ISSUE_NUMBER }}
+
+          **Thread ID:** [${{ env.THREAD_ID }}](https://ampcode.com/threads/${{ env.THREAD_ID }})
+
+          **Original Issue:**
+          > ${{ env.ISSUE_BODY }}
+
+          **Run Link:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+
+          PR_BODY=$(cat pr_body.txt)
+
+          PR_RESPONSE=$(curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls" \
+            -d "{
+              \"title\": \"$PR_TITLE\",
+              \"body\": \"$PR_BODY\",
+              \"head\": \"$BRANCH_NAME\",
+              \"base\": \"main\"
+            }")
+
+          PR_URL=$(echo "$PR_RESPONSE" | jq -r '.html_url')
+          echo "PR_URL=$PR_URL" >> $GITHUB_ENV
+
+      - name: Comment on issue with PR link
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
+            -d "{\"body\": \"@$ISSUE_USER Changes implemented! 🎉\n\n**Pull Request:** $PR_URL\n**Thread ID:** [$THREAD_ID](https://ampcode.com/threads/$THREAD_ID)\"}"
