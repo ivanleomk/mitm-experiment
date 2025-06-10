@@ -1,4 +1,4 @@
-name: Comment Trigger
+name: Amp Bot
 on:
   pull_request_review_comment:
     types: [created]
@@ -8,80 +8,86 @@ permissions:
   pull-requests: write
 
 jobs:
-  run-script:
+  amp:
     if: contains(github.event.comment.body, '@amp')
     runs-on: ubuntu-latest
-    steps:          
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      COMMENT_USER: ${{ github.event.comment.user.login }}
+      COMMENT_BODY: ${{ github.event.comment.body }}
+      AMP_API_KEY: ${{ secrets.AMP_API_KEY }}
+
+    steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          
-      - name: Restore thread cache
-        id: cache-restore
-        uses: actions/cache/restore@v3
+
+      - uses: actions/cache/restore@v3
+        id: cache
         with:
           path: thread_cache.json
-          key: thread-${{ github.event.pull_request.number }}
-          
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        
-      - name: Install the project
-        run: uv sync --all-extras --dev
-        
-      - name: Get thread ID from hello.py
-        id: thread
+          key: thread-${{ env.PR_NUMBER }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Install Sourcegraph Amp
+        run: npm install -g @sourcegraph/amp
+
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --all-extras --dev
+
+      - name: Extract user command
         run: |
-          # Run hello.py and capture thread ID
-          OUTPUT=$(uv run python hello.py)
-          
-          if echo "$OUTPUT" | grep -q "NEW:"; then
-            THREAD_ID=$(echo "$OUTPUT" | grep "NEW:" | cut -d: -f2)
-            echo "thread_id=$THREAD_ID" >> $GITHUB_OUTPUT
-            echo "is_new=true" >> $GITHUB_OUTPUT
+          # Extract the command after @amp
+          USER_COMMAND=$(echo "$COMMENT_BODY" | sed 's/^@amp\s*//')
+          echo "USER_COMMAND=$USER_COMMAND" >> $GITHUB_ENV
+
+      - name: Check for cached thread ID
+        id: thread-check
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: |
+          if [ -f thread_cache.json ]; then
+            THREAD_ID=$(cat thread_cache.json | jq -r '.thread_id')
+            echo "THREAD_ID=$THREAD_ID" >> $GITHUB_ENV
+            echo "CACHED=true" >> $GITHUB_ENV
           else
-            THREAD_ID=$(echo "$OUTPUT" | grep "EXISTING:" | cut -d: -f2)
-            echo "thread_id=$THREAD_ID" >> $GITHUB_OUTPUT
-            echo "is_new=false" >> $GITHUB_OUTPUT
+            echo "CACHED=false" >> $GITHUB_ENV
           fi
-          
+
+      - name: Run Amp with user command
+        if: env.CACHED != 'true'
+        run: |
+          # Run amp with the user command
+          echo "$USER_COMMAND" | amp
+
+      - name: Fetch latest threads
+        run: |
+          # Run the fetch script to get the latest threads
+          python fetch.py
+
+          cat output.json
+
+          # Get the first thread ID from the output
+          FIRST_THREAD_ID=$(cat output.json | jq -r '.[0].id')
+          echo "THREAD_ID=$FIRST_THREAD_ID" >> $GITHUB_ENV
+
+          # Save to cache file
+          echo "{\"thread_id\": \"$FIRST_THREAD_ID\"}" > thread_cache.json
+
       - name: Respond to comment
         run: |
-          if [ "${{ steps.thread.outputs.is_new }}" == "true" ]; then
-            MESSAGE="Initialising Amp with thread id of ${{ steps.thread.outputs.thread_id }}"
-          else
-            MESSAGE="Resuming Amp with thread id of ${{ steps.thread.outputs.thread_id }}"
+          CACHE_STATUS="Using new thread"
+          if [ "$CACHED" = "true" ]; then
+            CACHE_STATUS="Using cached thread"
           fi
-          
-          # Post general PR comment (fallback if review comments don't work)
+
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
-            -d "{
-              \"body\": \"$MESSAGE\n\n[<view job run>](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\"
-            }"
-            
-      - name: Get triggering comment
-        id: comment
-        run: |
-          # Save the triggering comment to file
-          echo "=== Triggering Comment ===" > comments.txt
-          echo "Comment by @${{ github.event.comment.user.login }}: ${{ github.event.comment.body }}" >> comments.txt
-          echo "" >> comments.txt
-          echo "File: ${{ github.event.comment.path }}" >> comments.txt
-          echo "Line: ${{ github.event.comment.line }}" >> comments.txt
-          
-          echo "Triggering comment saved to comments.txt"
-          cat comments.txt
-          
-      - name: Run test.py
-        run: uv run python test.py
-        
-      - name: Save thread cache
-        if: steps.thread.outputs.is_new == 'true'
-        uses: actions/cache/save@v3
+            "https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+            -d "{\"body\": \"@$COMMENT_USER $CACHE_STATUS\n\nThread ID: $THREAD_ID\nRun Link: $RUN_LINK\n\n> $COMMENT_BODY\"}"
+
+      - uses: actions/cache/save@v3
         with:
           path: thread_cache.json
-          key: thread-${{ github.event.pull_request.number }}
+          key: thread-${{ env.PR_NUMBER }}
