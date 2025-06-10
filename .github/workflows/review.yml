@@ -60,6 +60,28 @@ jobs:
           # Run amp with the user command
           echo "$USER_COMMAND" | amp
 
+      - name: Commit and push changes
+        run: |
+          # Configure git
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Check if there are any changes
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            # Add all changes
+            git add -A
+            
+            # Commit changes
+            git commit -m "Changes made by @amp: $USER_COMMAND"
+            
+            # Push changes back to the PR branch
+            git push origin HEAD:${{ github.head_ref }}
+            
+            echo "CHANGES_MADE=true" >> $GITHUB_ENV
+          else
+            echo "CHANGES_MADE=false" >> $GITHUB_ENV
+          fi
+
       - name: Fetch latest threads
         run: |
           # Run the fetch script to get the latest threads
@@ -80,6 +102,8 @@ jobs:
           if [ "$CACHED" = "true" ]; then
             CACHE_STATUS="Using cached thread"
           fi
+          
+          RUN_LINK="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
