@@ -44,7 +44,15 @@ jobs:
 
       - name: Create new Amp thread
         run: |
-          THREAD_ID=$(amp threads new | grep -o 'thread-[a-z0-9-]*')
+          THREAD_OUTPUT=$(amp threads new)
+          echo "Full amp output: $THREAD_OUTPUT"
+          THREAD_ID=$(echo "$THREAD_OUTPUT" | grep -o 'thread-[a-z0-9-]*' | head -1)
+          
+          if [ -z "$THREAD_ID" ]; then
+            echo "Failed to extract thread ID from: $THREAD_OUTPUT"
+            exit 1
+          fi
+          
           echo "THREAD_ID=$THREAD_ID" >> $GITHUB_ENV
           echo "Created new thread: $THREAD_ID"
 
