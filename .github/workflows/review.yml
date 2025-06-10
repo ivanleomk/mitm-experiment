@@ -67,7 +67,16 @@ jobs:
           fi
 
       - name: Run Amp with user command
-        run: echo "$USER_COMMAND" | amp threads continue "$THREAD_ID"
+        run: |
+          START_TIME=$(date +%s)
+          echo "$USER_COMMAND" | amp threads continue "$THREAD_ID"
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          
+          if [ $DURATION -lt 5 ]; then
+            echo "Command finished in $DURATION seconds (< 5s), running again..."
+            echo "$USER_COMMAND" | amp threads continue "$THREAD_ID"
+          fi
 
       - name: Commit and push changes
         run: |
