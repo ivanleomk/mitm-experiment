@@ -13,6 +13,34 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.event.pull_request.head.sha }}
           
+      - name: Restore thread cache
+        id: cache-restore
+        uses: actions/cache/restore@v3
+        with:
+          path: thread_cache.json
+          key: thread-${{ github.event.pull_request.number }}
+          
+      - name: Get PR comments
+        id: comments
+        run: |
+          # Get PR number
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          
+          # Get all issue comments (general PR comments)
+          echo "=== PR Issue Comments ===" > comments.txt
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+            | jq -r '.[] | "Comment by @\(.user.login): \(.body)"' >> comments.txt
+          
+          # Get all review comments (line-specific comments)
+          echo -e "\n=== PR Review Comments ===" >> comments.txt
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER/comments" \
+            | jq -r '.[] | "Review comment by @\(.user.login) on \(.path):\(.position): \(.body)"' >> comments.txt
+          
+          echo "Comments saved to comments.txt"
+          cat comments.txt
+          
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         
@@ -21,3 +49,10 @@ jobs:
         
       - name: Run test.py
         run: uv run python test.py
+        
+      - name: Save thread cache
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v3
+        with:
+          path: thread_cache.json
+          key: thread-${{ github.event.pull_request.number }}
