@@ -4,7 +4,7 @@ on:
     types: [created]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -55,10 +55,32 @@ jobs:
             echo "CACHED=false" >> $GITHUB_ENV
           fi
 
+      - name: Get or create thread ID
+        run: |
+          if [ "$CACHED" = "true" ] && [ -n "$THREAD_ID" ]; then
+            echo "Using cached thread ID: $THREAD_ID"
+          else
+            echo "Creating new thread"
+            # Run the fetch script to get the latest threads
+            python fetch.py
+            cat output.json
+            
+            # Get the first thread ID from the output
+            FIRST_THREAD_ID=$(cat output.json | jq -r '.[0].id')
+            echo "THREAD_ID=$FIRST_THREAD_ID" >> $GITHUB_ENV
+            
+            # Save to cache file
+            echo "{\"thread_id\": \"$FIRST_THREAD_ID\"}" > thread_cache.json
+          fi
+
       - name: Run Amp with user command
         run: |
-          # Run amp with the user command
-          echo "$USER_COMMAND" | amp
+          # Run amp with the user command and thread ID
+          if [ -n "$THREAD_ID" ]; then
+            echo "$USER_COMMAND" | amp --thread-id "$THREAD_ID"
+          else
+            echo "$USER_COMMAND" | amp
+          fi
 
       - name: Commit and push changes
         run: |
@@ -75,26 +97,12 @@ jobs:
             git commit -m "Changes made by @amp: $USER_COMMAND"
             
             # Push changes back to the PR branch
-            git push origin HEAD:${{ github.head_ref }}
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
             
             echo "CHANGES_MADE=true" >> $GITHUB_ENV
           else
             echo "CHANGES_MADE=false" >> $GITHUB_ENV
           fi
-
-      - name: Fetch latest threads
-        run: |
-          # Run the fetch script to get the latest threads
-          python fetch.py
-
-          cat output.json
-
-          # Get the first thread ID from the output
-          FIRST_THREAD_ID=$(cat output.json | jq -r '.[0].id')
-          echo "THREAD_ID=$FIRST_THREAD_ID" >> $GITHUB_ENV
-
-          # Save to cache file
-          echo "{\"thread_id\": \"$FIRST_THREAD_ID\"}" > thread_cache.json
 
       - name: Respond to comment
         run: |
@@ -104,11 +112,12 @@ jobs:
           fi
           
           RUN_LINK="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          THREAD_LINK="https://ampcode.com/threads/$THREAD_ID"
 
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
-            -d "{\"body\": \"@$COMMENT_USER $CACHE_STATUS\n\nThread ID: $THREAD_ID\nRun Link: $RUN_LINK\n\n> $COMMENT_BODY\"}"
+            -d "{\"body\": \"@$COMMENT_USER $CACHE_STATUS\n\n[Thread-ID: $THREAD_ID]($THREAD_LINK)\nRun Link: $RUN_LINK\n\n> $COMMENT_BODY\"}"
 
       - uses: actions/cache/save@v3
         with:
