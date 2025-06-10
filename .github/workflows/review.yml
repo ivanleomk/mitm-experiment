@@ -48,7 +48,7 @@ jobs:
           PR_BODY=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER" | jq -r '.body')
           
-          THREAD_ID_FROM_PR=$(echo "$PR_BODY" | grep -o 'thread-[a-z0-9-]*' | head -1)
+          THREAD_ID_FROM_PR=$(echo "$PR_BODY" | grep -o 'T-[a-f0-9-]*' | head -1)
           
           if [ ! -z "$THREAD_ID_FROM_PR" ]; then
             THREAD_ID="$THREAD_ID_FROM_PR"
@@ -61,7 +61,7 @@ jobs:
             echo "Using cached thread ID: $THREAD_ID"
           else
             echo "Creating new thread"
-            THREAD_ID=$(amp threads new | grep -o 'thread-[a-z0-9-]*')
+            THREAD_ID=$(amp threads new | grep -o 'T-[a-f0-9-]*')
             echo "THREAD_ID=$THREAD_ID" >> $GITHUB_ENV
             echo "{\"thread_id\": \"$THREAD_ID\"}" > thread_cache.json
           fi

@@ -46,7 +46,7 @@ jobs:
         run: |
           THREAD_OUTPUT=$(amp threads new)
           echo "Full amp output: $THREAD_OUTPUT"
-          THREAD_ID=$(echo "$THREAD_OUTPUT" | grep -o 'thread-[a-z0-9-]*' | head -1)
+          THREAD_ID=$(echo "$THREAD_OUTPUT" | grep -o 'T-[a-f0-9-]*' | head -1)
           
           if [ -z "$THREAD_ID" ]; then
             echo "Failed to extract thread ID from: $THREAD_OUTPUT"
