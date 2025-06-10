@@ -11,6 +11,6 @@ She looked surprised.
 ## 3. The Pun Master
 I used to hate facial hair, but then it grew on me.
 
-## 4. The Restaurant Review
-I went to a restaurant that serves "breakfast at any time."
-So I ordered French Toast during the Renaissance.
+## 4. The Bay Area Restaurant Review
+I went to a San Francisco restaurant that serves "breakfast at any time."
+So I ordered avocado toast during the Gold Rush... and it still cost $28.
